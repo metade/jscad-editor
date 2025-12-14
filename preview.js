@@ -346,13 +346,22 @@ function runJscad(source) {
   const runnable = transpileJscadToRunnable(source);
 
   const sandbox = {
-    // Expose a small set; extend as you add primitives
-    roundedCuboid,
+    // Expose main JSCAD modules selectively to avoid reserved keywords
     primitives,
     booleans,
     transforms,
-    union: booleans?.union,
-    translate: transforms?.translate,
+    extrusions: JSCAD.extrusions,
+    hulls: JSCAD.hulls,
+    measurements: JSCAD.measurements,
+    expansions: JSCAD.expansions,
+    colors: JSCAD.colors,
+    maths: JSCAD.maths,
+    geometries: JSCAD.geometries,
+    utils: JSCAD.utils,
+    // Expose common functions directly for convenience
+    ...(primitives || {}),
+    ...(booleans || {}),
+    ...(transforms || {}),
     console,
   };
 
