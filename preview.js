@@ -348,6 +348,9 @@ function runJscad(source) {
   const sandbox = {
     // Expose a small set; extend as you add primitives
     roundedCuboid,
+    primitives,
+    booleans,
+    transforms,
     union: booleans?.union,
     translate: transforms?.translate,
     console,
