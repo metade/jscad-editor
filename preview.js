@@ -26,7 +26,7 @@ const $app = document.getElementById("app");
 if (!$app) throw new Error("Missing #app element in HTML.");
 
 $app.innerHTML = `
-  <div class="wrap">
+  <div class="wrap panel-hidden">
     <div class="panel">
       <h1>OpenJSCAD v2 code</h1>
       <div id="codeHost"></div>
