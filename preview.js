@@ -5,7 +5,7 @@ import * as STL from "https://esm.sh/@jscad/stl-serializer@2.1.21?bundle&target=
 const fallbackCode = `// 20 mm cube with 2 mm fillets on all edges
 // OpenJSCAD v2 (@jscad/modeling)
 // Standard import pattern - import modules, then destructure what you need
-import { primitives } from '@jscad/modeling'
+import { primitives, booleans, transforms, extrusions, hulls, geometries, utils } from '@jscad/modeling'
 
 const { roundedCuboid } = primitives
 
@@ -39,7 +39,7 @@ $app.innerHTML = `
       </div>
       <div class="tiny">
         Notes: this preview supports <code>main()</code> returning a <code>geom3</code> or an array of <code>geom3</code>.
-        Use standard imports: <code>import { primitives, booleans, transforms } from '@jscad/modeling'</code>
+        Use standard imports: <code>import { primitives, booleans, transforms, extrusions, hulls, geometries, utils } from '@jscad/modeling'</code>
       </div>
     </div>
 
