@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>JSCAD 3D Preview</title>
+
+        <!--
+      Captain: Replace these URLs with your Gist "Raw" URLs.
+      - styles.css: your hosted CSS
+      - preview.js: your hosted JS (type="module")
+
+      Optional:
+      - model.jscad can be loaded by adding ?model=<RAW_URL> to this page URL.
+        Example: index.html?model=https%3A%2F%2Fgist...%2Fraw%2Fmodel.jscad
+    -->
+
+        <link rel="stylesheet" href="styles.css" />
+    </head>
+    <body>
+        <!-- Source code holder (kept in HTML so GPTs can update it easily) -->
+        <textarea id="code" style="display: none"></textarea>
+
+        <div id="app"></div>
+
+        <script type="module" src="preview.js"></script>
+    </body>
+</html>
