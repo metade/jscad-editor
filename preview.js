@@ -5,9 +5,9 @@ import * as STL from "https://esm.sh/@jscad/stl-serializer@2.1.21?bundle&target=
 
 const { primitives, booleans, transforms } = JSCAD;
 
-const defaultCode = `// 20 mm cube with 2 mm fillets on all edges
+const fallbackCode = `// 20 mm cube with 2 mm fillets on all edges
 // OpenJSCAD v2 (@jscad/modeling)
-
+//
 // NOTE: imports are ignored in this preview; primitives are provided by the sandbox.
 // import { roundedCuboid } from '@jscad/modeling'.primitives
 
@@ -23,12 +23,15 @@ export const main = () => {
   })
 }`;
 
-// Build UI
+// Mount
 const $app = document.getElementById("app");
+if (!$app) throw new Error("Missing #app element in HTML.");
+
 $app.innerHTML = `
   <div class="wrap">
     <div class="panel">
       <h1>OpenJSCAD v2 code</h1>
+      <div id="codeHost"></div>
       <div class="row">
         <button id="togglePanel">Hide panel</button>
         <button id="render">Render</button>
@@ -41,6 +44,7 @@ $app.innerHTML = `
         Imports in the textarea are ignored; primitives are provided by the sandbox.
       </div>
     </div>
+
     <div class="view" id="view">
       <button class="panel-handle" id="showPanel">Show panel</button>
       <div class="hint">Drag: orbit · Wheel: zoom · Right-drag: pan</div>
@@ -64,20 +68,35 @@ $app.innerHTML = `
   </div>
 `;
 
-const $wrap = document.querySelector(".wrap");
-const $code =
-  document.getElementById("code") ??
-  (() => {
-    const t = document.createElement("textarea");
-    t.id = "code";
-    document.body.appendChild(t);
-    return t;
-  })();
+// Reuse textarea from HTML (source-of-truth for GPT edits)
+function ensureCodeTextarea() {
+  let $code = document.getElementById("code");
+  if (!$code) {
+    // Fallback: create it if HTML didn’t provide one
+    $code = document.createElement("textarea");
+    $code.id = "code";
+  }
 
+  // Ensure it is visible and styled via existing CSS selector textarea#code
+  $code.style.display = "";
+  $code.removeAttribute("hidden");
+
+  // Move into the panel host so user can edit
+  const $host = document.getElementById("codeHost");
+  $host.appendChild($code);
+
+  // Seed fallback only if empty
+  if (!$code.value || !$code.value.trim()) $code.value = fallbackCode;
+
+  return $code;
+}
+
+const $wrap = document.querySelector(".wrap");
 const $status = document.getElementById("status");
 const $view = document.getElementById("view");
 const $modal = document.getElementById("modal");
 const $stlOut = document.getElementById("stlOut");
+const $code = ensureCodeTextarea();
 
 function setStatus(msg) {
   $status.textContent = msg;
@@ -105,7 +124,15 @@ $modal.addEventListener("click", (e) => {
   if (e.target === $modal) closeModal();
 });
 
-// Escape closes modal; if panel hidden, Escape restores panel.
+function hidePanel() {
+  $wrap.classList.add("panel-hidden");
+  requestAnimationFrame(resize);
+}
+function showPanel() {
+  $wrap.classList.remove("panel-hidden");
+  requestAnimationFrame(resize);
+}
+
 window.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if ($modal.style.display === "flex") {
@@ -127,7 +154,7 @@ async function loadModelFromQuery() {
     return true;
   } catch (err) {
     console.warn("Failed to load model:", err);
-    setStatus("Failed to load model URL — using default.");
+    setStatus("Failed to load model URL — using existing code.");
     return false;
   }
 }
@@ -138,7 +165,6 @@ if (typeof roundedCuboid !== "function") {
     "Error: primitives.roundedCuboid missing in @jscad/modeling bundle.",
   );
 }
-$code.value = defaultCode;
 await loadModelFromQuery();
 
 // --- Three.js scene setup ---
@@ -164,7 +190,6 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x222233, 1.0));
-
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(80, 120, 60);
 scene.add(dirLight);
@@ -207,11 +232,9 @@ function isGeom3Like(g) {
     (Array.isArray(g.polygons) || Array.isArray(g.geometry?.polygons))
   );
 }
-
 function getPolygons(g) {
   return g?.polygons ?? g?.geometry?.polygons ?? [];
 }
-
 function validateGeom3Polygons(g) {
   const polys = getPolygons(g);
   if (!Array.isArray(polys) || polys.length === 0)
@@ -258,7 +281,6 @@ function geom3ToThreeBufferGeometry(g) {
       const a = verts[0],
         b = verts[i],
         c = verts[i + 1];
-
       positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
 
       vA.set(a[0], a[1], a[2]);
@@ -267,7 +289,6 @@ function geom3ToThreeBufferGeometry(g) {
       cb.subVectors(vC, vB);
       ab.subVectors(vA, vB);
       cb.cross(ab).normalize();
-
       normals.push(cb.x, cb.y, cb.z, cb.x, cb.y, cb.z, cb.x, cb.y, cb.z);
     }
   }
@@ -324,8 +345,8 @@ function transpileJscadToRunnable(source) {
 function runJscad(source) {
   const runnable = transpileJscadToRunnable(source);
 
-  // Sandbox: expose only what we choose.
   const sandbox = {
+    // Expose a small set; extend as you add primitives
     roundedCuboid,
     union: booleans?.union,
     translate: transforms?.translate,
@@ -408,10 +429,8 @@ function serializeAsciiStlFromCode(source) {
     !/\bendsolid\b/i.test(text) ||
     text.length < 100
   ) {
-    console.warn("STL output sample:", text.slice(0, 200));
     throw new Error("STL serialization produced empty/invalid output.");
   }
-
   return text;
 }
 
@@ -419,14 +438,12 @@ async function copyStl() {
   setStatus("Serializing STL (ASCII)…");
   try {
     const text = serializeAsciiStlFromCode($code.value);
-
     try {
       if (!navigator.clipboard?.writeText)
         throw new Error("Clipboard API not available.");
       await navigator.clipboard.writeText(text);
       setStatus("STL copied to clipboard (ASCII).");
-    } catch (clipboardErr) {
-      console.warn("Clipboard write blocked/unavailable:", clipboardErr);
+    } catch {
       openModalWithText(text);
       setStatus("Clipboard blocked — opened STL text for manual copy.");
     }
@@ -436,24 +453,9 @@ async function copyStl() {
   }
 }
 
-// Panel toggle
-const $togglePanel = document.getElementById("togglePanel");
-const $showPanel = document.getElementById("showPanel");
-
-function hidePanel() {
-  $wrap.classList.add("panel-hidden");
-  requestAnimationFrame(resize);
-}
-
-function showPanel() {
-  $wrap.classList.remove("panel-hidden");
-  requestAnimationFrame(resize);
-}
-
-$togglePanel.addEventListener("click", hidePanel);
-$showPanel.addEventListener("click", showPanel);
-
 // Buttons
+document.getElementById("togglePanel").addEventListener("click", hidePanel);
+document.getElementById("showPanel").addEventListener("click", showPanel);
 document.getElementById("render").addEventListener("click", renderCode);
 document.getElementById("reset").addEventListener("click", () => {
   if (currentMesh) fitCameraToObject(currentMesh);
