@@ -1,15 +1,13 @@
 import * as THREE from "https://esm.sh/three@0.160.0";
 import { OrbitControls } from "https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";
-import * as JSCAD from "https://esm.sh/@jscad/modeling@2.12.5?bundle&target=es2022";
 import * as STL from "https://esm.sh/@jscad/stl-serializer@2.1.21?bundle&target=es2022";
-
-const { primitives, booleans, transforms } = JSCAD;
 
 const fallbackCode = `// 20 mm cube with 2 mm fillets on all edges
 // OpenJSCAD v2 (@jscad/modeling)
-//
-// NOTE: imports are ignored in this preview; primitives are provided by the sandbox.
-// import { roundedCuboid } from '@jscad/modeling'.primitives
+// Standard import pattern - import modules, then destructure what you need
+import { primitives } from '@jscad/modeling'
+
+const { roundedCuboid } = primitives
 
 const size = 20
 const filletRadius = 2
@@ -41,7 +39,7 @@ $app.innerHTML = `
       </div>
       <div class="tiny">
         Notes: this preview supports <code>main()</code> returning a <code>geom3</code> or an array of <code>geom3</code>.
-        Imports in the textarea are ignored; primitives are provided by the sandbox.
+        Use standard imports: <code>import { primitives, booleans, transforms } from '@jscad/modeling'</code>
       </div>
     </div>
 
@@ -159,12 +157,6 @@ async function loadModelFromQuery() {
   }
 }
 
-const roundedCuboid = primitives?.roundedCuboid;
-if (typeof roundedCuboid !== "function") {
-  setStatus(
-    "Error: primitives.roundedCuboid missing in @jscad/modeling bundle.",
-  );
-}
 await loadModelFromQuery();
 
 // --- Three.js scene setup ---
@@ -327,50 +319,31 @@ function fitCameraToObject(obj) {
   controls.update();
 }
 
-// --- Minimal compiler for common OpenJSCAD v2 patterns ---
-function transpileJscadToRunnable(source) {
-  let s = source.replace(/^\s*import\s+.*?;?\s*$/gm, "");
-  s = s.replace(
-    /export\s+const\s+main\s*=\s*\(\s*\)\s*=>\s*\{/m,
-    "function main(){",
-  );
-  s = s.replace(
-    /export\s+const\s+main\s*=\s*\([^)]*\)\s*=>\s*\{/m,
-    "function main(){",
-  );
-  s = s.replace(/^\s*export\s+/gm, "");
-  return s;
-}
-
-function runJscad(source) {
-  const runnable = transpileJscadToRunnable(source);
-
-  const sandbox = {
-    // Expose main JSCAD modules selectively to avoid reserved keywords
-    primitives,
-    booleans,
-    transforms,
-    extrusions: JSCAD.extrusions,
-    hulls: JSCAD.hulls,
-    measurements: JSCAD.measurements,
-    expansions: JSCAD.expansions,
-    colors: JSCAD.colors,
-    maths: JSCAD.maths,
-    geometries: JSCAD.geometries,
-    utils: JSCAD.utils,
-    // Expose common functions directly for convenience
-    ...(primitives || {}),
-    ...(booleans || {}),
-    ...(transforms || {}),
-    console,
-  };
-
-  const fn = new Function(
-    ...Object.keys(sandbox),
-    `${runnable}\n\nif (typeof main !== 'function') throw new Error('No main() export found.');\nreturn main();`,
+// --- Dynamic module loading for JSCAD ---
+async function runJscad(source) {
+  // Simple import rewriting - just replace @jscad/modeling with the ESM URL
+  const modifiedSource = source.replace(
+    /from\s+['"]@jscad\/modeling[^'"]*['"]/g,
+    "from 'https://esm.sh/@jscad/modeling@2.12.5?bundle&target=es2022'",
   );
 
-  return fn(...Object.values(sandbox));
+  // Create a blob URL for the module
+  const blob = new Blob([modifiedSource], { type: "application/javascript" });
+  const moduleUrl = URL.createObjectURL(blob);
+
+  try {
+    // Dynamically import the module
+    const module = await import(moduleUrl);
+
+    if (typeof module.main !== "function") {
+      throw new Error("No main() export found.");
+    }
+
+    return module.main();
+  } finally {
+    // Clean up the blob URL
+    URL.revokeObjectURL(moduleUrl);
+  }
 }
 
 function normalizeResult(result) {
@@ -392,10 +365,10 @@ function normalizeResult(result) {
   throw new Error("Expected main() to return a geom3 (or an array of geom3).");
 }
 
-function renderCode() {
+async function renderCode() {
   setStatus("Rendering…");
   try {
-    const raw = runJscad($code.value);
+    const raw = await runJscad($code.value);
     const solid = normalizeResult(raw);
     validateGeom3Polygons(solid);
 
@@ -422,8 +395,8 @@ function renderCode() {
   }
 }
 
-function serializeAsciiStlFromCode(source) {
-  const raw = runJscad(source);
+async function serializeAsciiStlFromCode(source) {
+  const raw = await runJscad(source);
   const solid = normalizeResult(raw);
   if (!isGeom3Like(solid))
     throw new Error("STL export requires a geom3 solid.");
@@ -449,7 +422,7 @@ function serializeAsciiStlFromCode(source) {
 async function copyStl() {
   setStatus("Serializing STL (ASCII)…");
   try {
-    const text = serializeAsciiStlFromCode($code.value);
+    const text = await serializeAsciiStlFromCode($code.value);
     try {
       if (!navigator.clipboard?.writeText)
         throw new Error("Clipboard API not available.");
