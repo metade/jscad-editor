@@ -1,0 +1,10 @@
+{
+  "name": "jscad-editor",
+  "private": true,
+  "devDependencies": {
+    "html-minifier-terser": "^7.2.0"
+  },
+  "scripts": {
+    "build:min": "node bin/minify.mjs"
+  }
+}
